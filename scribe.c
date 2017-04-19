@@ -670,7 +670,6 @@ void editorSave() {
 
 /*** find ***/
 void editorFindCallback(char *query, int key) {
-    // TODO: add ability to search forward/backward in same line
     static int last_match_y = 0;
     static int last_match_x = -1;
     static int direction = 1;
