@@ -671,7 +671,8 @@ void editorSave() {
 /*** find ***/
 void editorFindCallback(char *query, int key) {
     // TODO: add ability to search forward/backward in same line
-    static int last_match = -1;
+    static int last_match_y = 0;
+    static int last_match_x = -1;
     static int direction = 1;
 
     static int saved_hl_line;
@@ -684,7 +685,8 @@ void editorFindCallback(char *query, int key) {
     }
 
     if (key == '\r' || key == '\x1b') {
-        last_match = -1;
+        last_match_y = 0;
+        last_match_x = -1;
         direction = 1;
         return;
     } else if (key == ARROW_RIGHT || key == ARROW_DOWN) {
@@ -692,15 +694,15 @@ void editorFindCallback(char *query, int key) {
     } else if (key == ARROW_LEFT || key == ARROW_UP) {
         direction = -1;
     } else {
-        last_match = -1;
+        last_match_y = 0;
+        last_match_x = -1;
         direction = 1;
     }
 
-    if (last_match == -1) direction = 1;
-    int current = last_match;
+    int query_len = strlen(query);
+    int current = last_match_y;
     int i;
     for (i = 0; i < E.numrows; ++i) {
-        current += direction;
         if (current == -1) {
             current = E.numrows - 1;
         } else if (current == E.numrows) {
@@ -708,19 +710,42 @@ void editorFindCallback(char *query, int key) {
         }
 
         erow *row = &E.row[current];
-        char *match = strstr(row->render, query);
+        char *match = NULL;
+        if (direction == 1) {
+            match = strstr(row->render + last_match_x + 1, query);
+        } else if (direction == -1) {
+            int j;
+            if (last_match_x == -1) {
+                last_match_x = row->rsize + 1;
+            }
+            for (j = last_match_x - query_len; j >= 0; --j) {
+                match = strstr(row->render + j, query);
+                if (match) { 
+                    if (editorRowRxToCx(row, match - row->render) < last_match_x) {
+                        break;
+                    } else {
+                        match = NULL;
+                    }
+                } 
+            }
+        }
         if (match) {
-            last_match = current;
+            last_match_y = current;
+            last_match_x = editorRowRxToCx(row, match - row->render);
             E.cy = current;
-            E.cx = editorRowRxToCx(row, match - row->render);
+            E.cx = last_match_x;
             E.rowoff = E.numrows;
-
+            if (last_match_x + query_len > E.screencols + E.coloff) {
+                E.coloff = last_match_x + query_len - E.screencols + 1;
+            }
             saved_hl_line = current;
             saved_hl = malloc(row->rsize);
             memcpy(saved_hl, row->hl, row->rsize);
             memset(&row->hl[match - row->render], HL_MATCH, strlen(query));
             break;
         }
+        current += direction;
+        last_match_x = -1;
     }
 }
 
